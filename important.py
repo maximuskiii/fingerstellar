@@ -5,6 +5,8 @@ import mediapipe as mp
 import mediapipe as mp
 import mediapipe as mp
 import mediapipe as mp
+from gtts import gTTS
+import os
 
 from mediapipe import solutions
 from mediapipe.tasks import python
@@ -17,6 +19,7 @@ import numpy as np
 
 model_path = 'gesture_recognizer.task'
 hand_model_path = 'hand_landmarker.task'
+language = 'en'
 
 
 hand_base_options = python.BaseOptions(model_asset_path='hand_landmarker.task')
@@ -50,14 +53,26 @@ gestureDict = {
     "Thumb_Down": "Not Ok",
     "Thumb_Up": "Ok",
     "Victory": "Mission Complete",
-    "ILoveYou": "I love you!",
+    "ILoveYou": "Fatal Injury! Need Help",
 }
+
+outputs = ["None"]
+
+def playSound(mytext):
+   myobj = gTTS(text=mytext, lang=language, slow=False)
+   myobj.save("sound.mp3")
+   os.system("afplay sound.mp3") 
 
 # Create a gesture recognizer instance with the live stream mode:
 def print_result(result: GestureRecognizerResult, output_image: mp.Image, timestamp_ms: int):
     if result.gestures != []:
         gesture = result.gestures[0][0].category_name
-        print(gestureDict[gesture])
+        # print(gestureDict[gesture]) 
+        outputs.append(gestureDict[gesture])
+        # print(outputs)
+        # if (len(outputs)>10):
+        #    playSound(outputs[0])
+        #    outputs = []
 
 
 options = GestureRecognizerOptions(
@@ -94,7 +109,7 @@ def handOverEyes(handLandmarks, faceLandmarks):
    for leftEyePoint in faceDict["leftEyeIris"]:
       if is_overlapping(wrist, thumb_tip, middle_finger_tip, pinky_tip, (faceLandmarks[leftEyePoint].x, faceLandmarks[leftEyePoint].y)):
          count += 1
-   if count >= (len(faceDict["rightEyeIris"])+len(faceDict["leftEyeIris"]))/2: print("Cannot See")
+   if count >= (len(faceDict["rightEyeIris"])+len(faceDict["leftEyeIris"]))/2: return "Cannot See"
   
 
 def handOverCheeks():
@@ -115,7 +130,7 @@ def handOverMouth(handLandmarks, faceLandmarks):
    for mouthPoint in faceDict["lipsUpperInner"]:
       if is_overlapping(wrist, thumb_tip, middle_finger_tip, pinky_tip, (faceLandmarks[mouthPoint].x, faceLandmarks[mouthPoint].y)):
          count += 1
-   if count >= len(faceDict["lipsLowerInner"])+len(faceDict["lipsUpperInner"])/2: print("Cannot Breathe")
+   if count >= len(faceDict["lipsLowerInner"])+len(faceDict["lipsUpperInner"])/2: return "Cannot Breathe"
 
 
 handDict = {
@@ -291,6 +306,8 @@ from mediapipe.framework.formats import landmark_pb2
 
 def main():
     timestamp = 0
+    timer = 0
+
 
     # Initialize OpenCV webcamq
     cap = cv2.VideoCapture(0)
@@ -303,6 +320,7 @@ def main():
           
           # Process the frame with Mediapipe Hand Landmarks
           timestamp += 1
+          timer += 1
           mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame)
           hand_detection_result = hand_detector.detect(mp_image)
           face_detection_result = face_detector.detect(mp_image)
@@ -311,10 +329,13 @@ def main():
           if hand_detection_result.hand_landmarks and face_detection_result.face_landmarks:
              handLandmarks = hand_detection_result.hand_landmarks[0]
              faceLandmarks = face_detection_result.face_landmarks[0]
-             handOverEyes(handLandmarks, faceLandmarks)
-             handOverMouth(handLandmarks, faceLandmarks)
-             
-
+             outputs.append(handOverEyes(handLandmarks, faceLandmarks))
+             outputs.append(handOverMouth(handLandmarks, faceLandmarks))
+          
+          print(outputs[-1])
+          if len(outputs) > 5 and timer >= 40 and outputs[-1] != "None" and outputs[-1] != "" and outputs[-1]!= None:
+             playSound(outputs[-1])
+             timer = 0
           # Display the frame with landmarks
           hand_annotated_image = draw_hand_landmarks_on_image(mp_image.numpy_view(), hand_detection_result)
           annotated_image = draw_face_landmarks_on_image(hand_annotated_image, face_detection_result)
